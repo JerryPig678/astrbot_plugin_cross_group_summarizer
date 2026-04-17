@@ -134,6 +134,6 @@ astrbot_plugin_cross_group_summarizer/
 
 <div align="center">
 
-**Made with ❤️ by 棒棒糖**
+**Made with ❤️ by JerryPig678**
 
 </div>

@@ -1,6 +1,6 @@
-name: astrbot_plugin_group_archiver
-display_name: 群聊监控归档
+name: astrbot_plugin_cross_group_summarizer
+display_name: 跨群监控归档
 desc: 监控多个群聊，定时生成总结并发送到指定群，支持文件归档
 version: v1.0.0
-author: 棒棒糖
-repo: https://github.com/your-repo/astrbot_plugin_group_archiver
+author: JerryPig678
+repo: https://github.com/JerryPig678/astrbot_plugin_cross_group_summarizer
