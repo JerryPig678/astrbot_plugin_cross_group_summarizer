@@ -63,4 +63,4 @@ P.S. 其实本质是个小维日记的超级青春版
 
 ## ❤️ 鸣谢
 - 感谢 **AstrBot** 框架和 **AstrBot T2I Service** 。
-- 受 **Loping151** 的启发，开发了本插件。
+- 受 **Loping151** 的启发，开发了本插件。"# astrbot_plugin_cross_group_summarizer" 
