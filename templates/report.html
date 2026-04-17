@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>群聊总结</title>
+    <style>
+        :root {
+            --pink-50: #FDF2F8; --pink-100: #FCE7F3; --pink-200: #FBCFE8;
+            --pink-300: #F9A8D4; --pink-400: #F472B6; --pink-500: #EC4899;
+            --pink-600: #DB2777; --pink-700: #BE185D;
+            --gray-50: #FAFAFA; --gray-100: #F4F4F5; --gray-200: #E4E4E7;
+            --gray-400: #A1A1AA; --gray-500: #71717A; --gray-700: #3F3F46; --gray-800: #27272A;
+            --amber-50: #FFFBEB; --amber-100: #FEF3C7; --amber-500: #F59E0B; --amber-700: #B45309;
+            --white: #FFFFFF;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            --radius-lg: 0.75rem; --radius-xl: 1rem; --radius-2xl: 1.5rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+            background: linear-gradient(135deg, var(--pink-100) 0%, var(--pink-200) 50%, var(--pink-300) 100%);
+            min-height: 100vh; padding: 24px; line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .container { max-width: 480px; margin: 0 auto; }
+        .card { 
+            background: var(--white); 
+            border-radius: var(--radius-2xl); 
+            box-shadow: var(--shadow-xl); 
+            overflow: hidden;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .header {
+            background: linear-gradient(135deg, var(--pink-500) 0%, var(--pink-600) 100%);
+            padding: 28px 24px 24px; text-align: center; position: relative; overflow: hidden;
+        }
+        .pig-icon { 
+            width: 64px; height: 64px; 
+            margin: 0 auto 10px;
+        }
+        .pig-icon svg {
+            width: 100%; height: 100%;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));
+        }
+        .header-title { 
+            color: var(--white); 
+            font-size: 22px; 
+            font-weight: 700; 
+            margin-bottom: 6px; 
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .header-subtitle { 
+            color: rgba(255,255,255,0.9); 
+            font-size: 13px; 
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .content { padding: 20px; }
+        .stats-row { 
+            display: flex; 
+            justify-content: center; 
+            gap: 24px; 
+            margin-bottom: 20px;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--pink-50) 0%, var(--pink-100) 100%);
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--pink-200);
+        }
+        .stat-item { text-align: center; min-width: 50px; }
+        .stat-value { font-size: 24px; font-weight: 700; color: var(--pink-600); line-height: 1.2; }
+        .stat-label { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+        .stat-divider { width: 1px; background: var(--pink-200); }
+        .section { margin-bottom: 20px; }
+        .section-header { 
+            display: flex; align-items: center; 
+            margin-bottom: 12px; 
+            padding-bottom: 10px; 
+            border-bottom: 2px solid var(--pink-100); 
+        }
+        .section-icon { 
+            width: 22px; height: 22px; border-radius: 50%; 
+            background: var(--pink-500); color: var(--white);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: bold; margin-right: 8px;
+            flex-shrink: 0;
+        }
+        .section-title { font-size: 15px; font-weight: 600; color: var(--gray-800); }
+        .summary-list { display: flex; flex-direction: column; gap: 10px; }
+        .summary-item { 
+            background: linear-gradient(135deg, var(--pink-50) 0%, var(--white) 100%); 
+            border-radius: var(--radius-lg); 
+            padding: 12px 14px; 
+            border-left: 4px solid var(--pink-400); 
+            box-shadow: var(--shadow-sm);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .summary-time { 
+            font-size: 11px; 
+            font-weight: 600; 
+            color: var(--pink-500); 
+            margin-bottom: 4px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .summary-text { 
+            font-size: 13px; 
+            color: var(--gray-700); 
+            line-height: 1.5;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .notice-box { 
+            background: linear-gradient(135deg, var(--amber-50) 0%, var(--amber-100) 100%); 
+            border-radius: var(--radius-lg); 
+            padding: 14px; 
+            border-left: 4px solid var(--amber-500);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .notice-list { display: flex; flex-direction: column; gap: 8px; }
+        .notice-item { 
+            font-size: 13px; 
+            color: var(--amber-700); 
+            line-height: 1.5; 
+            padding-left: 14px; 
+            position: relative;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .notice-item::before { 
+            content: ""; position: absolute; left: 0; top: 7px; 
+            width: 5px; height: 5px; background: var(--amber-500); border-radius: 50%; 
+        }
+        .footer { 
+            background: var(--pink-50); 
+            padding: 16px 24px; 
+            text-align: center; 
+            border-top: 1px solid var(--pink-100); 
+        }
+        .footer-text { font-size: 12px; color: var(--pink-500); font-weight: 500; }
+        .divider { 
+            height: 1px; 
+            background: linear-gradient(90deg, transparent, var(--pink-200), transparent); 
+            margin: 16px 0; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <header class="header">
+                <div class="pig-icon">
+                    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                        <ellipse cx="50" cy="55" rx="35" ry="30" fill="#FFB6C1"/>
+                        <ellipse cx="50" cy="55" rx="32" ry="27" fill="#FFC0CB"/>
+                        <ellipse cx="50" cy="62" rx="14" ry="10" fill="#FFB6C1"/>
+                        <circle cx="44" cy="60" r="2" fill="#FF69B4"/>
+                        <circle cx="56" cy="60" r="2" fill="#FF69B4"/>
+                        <ellipse cx="50" cy="68" rx="4" ry="2" fill="#FF69B4"/>
+                        <circle cx="38" cy="45" r="6" fill="#FFB6C1"/>
+                        <circle cx="62" cy="45" r="6" fill="#FFB6C1"/>
+                        <circle cx="38" cy="45" r="4" fill="#FFC0CB"/>
+                        <circle cx="62" cy="45" r="4" fill="#FFC0CB"/>
+                        <circle cx="40" cy="48" r="2" fill="#333"/>
+                        <circle cx="60" cy="48" r="2" fill="#333"/>
+                        <circle cx="41" cy="47" r="0.8" fill="#fff"/>
+                        <circle cx="61" cy="47" r="0.8" fill="#fff"/>
+                        <ellipse cx="35" cy="25" rx="8" ry="10" fill="#FFB6C1"/>
+                        <ellipse cx="65" cy="25" rx="8" ry="10" fill="#FFB6C1"/>
+                        <ellipse cx="35" cy="25" rx="6" ry="8" fill="#FFC0CB"/>
+                        <ellipse cx="65" cy="25" rx="6" ry="8" fill="#FFC0CB"/>
+                        <ellipse cx="35" cy="28" rx="3" ry="4" fill="#FF69B4"/>
+                        <ellipse cx="65" cy="28" rx="3" ry="4" fill="#FF69B4"/>
+                        <path d="M 20 55 Q 15 50, 20 45" stroke="#FFB6C1" stroke-width="3" fill="none" stroke-linecap="round"/>
+                        <path d="M 80 55 Q 85 50, 80 45" stroke="#FFB6C1" stroke-width="3" fill="none" stroke-linecap="round"/>
+                        <path d="M 45 75 Q 50 78, 55 75" stroke="#FF69B4" stroke-width="2" fill="none" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <h1 class="header-title">{{ group_name }} 群聊总结</h1>
+                <p class="header-subtitle">{{ date }} / 最近 {{ hours }} 小时</p>
+            </header>
+            <main class="content">
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <div class="stat-value">{{ summary_points|length }}</div>
+                        <div class="stat-label">话题</div>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ hours }}h</div>
+                        <div class="stat-label">时长</div>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-item">
+                        <div class="stat-value">{% if important_notices and important_notices[0] != "无" %}{{ important_notices|length }}{% else %}0{% endif %}</div>
+                        <div class="stat-label">通知</div>
+                    </div>
+                </div>
+                {% if important_notices and important_notices|length > 0 and important_notices[0] != "无" %}
+                <section class="section">
+                    <div class="section-header">
+                        <div class="section-icon">!</div>
+                        <h2 class="section-title">重要通知</h2>
+                    </div>
+                    <div class="notice-box">
+                        <div class="notice-list">
+                            {% for notice in important_notices %}
+                            {% if notice and notice != "无" %}
+                            <div class="notice-item">{{ notice }}</div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </section>
+                <div class="divider"></div>
+                {% endif %}
+                <section class="section">
+                    <div class="section-header">
+                        <div class="section-icon">S</div>
+                        <h2 class="section-title">消息总结</h2>
+                    </div>
+                    <div class="summary-list">
+                        {% for point in summary_points %}
+                        <article class="summary-item">
+                            <div class="summary-time">{{ point.time_range }}</div>
+                            <p class="summary-text">{{ point.content }}</p>
+                        </article>
+                        {% endfor %}
+                    </div>
+                </section>
+            </main>
+            <footer class="footer">
+                <p class="footer-text">{{ bot_name }} 为您生成</p>
+            </footer>
+        </div>
+    </div>
+</body>
+</html>
