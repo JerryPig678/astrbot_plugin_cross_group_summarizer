@@ -5,14 +5,11 @@ import re
 import time
 import datetime
 import traceback
-from collections import Counter
 from pathlib import Path
 
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
-from astrbot.api.message_components import Node, Plain, Image
-from astrbot.api.event import MessageChain
 
 
 def _parse_llm_json(text: str) -> dict:
@@ -264,7 +261,7 @@ SUMMARY_TEMPLATE = '''<!DOCTYPE html>
 '''
 
 
-@register("group_archiver", "棒棒糖", "群聊监控归档", "1.0.0")
+@register("group_archiver", "JerryPig678", "群聊监控归档", "1.0.0")
 class GroupArchiverPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -284,6 +281,8 @@ class GroupArchiverPlugin(Star):
         
         self._scheduler_task = None
         self._last_summary_time = {}
+        self._recent_media_files = []
+        self._target_umo = None
         
         self._plugin_data_path = Path("data/plugin_data/group_archiver")
         self._plugin_data_path.mkdir(parents=True, exist_ok=True)
@@ -293,12 +292,12 @@ class GroupArchiverPlugin(Star):
         try:
             with open(template_path, "r", encoding="utf-8") as f:
                 self.html_template = f.read()
-            logger.info(f"群聊归档: 成功加载模板: {template_path}")
+            logger.info(f"群聊总结: 成功加载模板: {template_path}")
         except FileNotFoundError:
-            logger.warning(f"群聊归档: 未找到模板文件，使用内置模板")
+            logger.warning(f"群聊总结: 未找到模板文件，使用内置模板")
             self.html_template = SUMMARY_TEMPLATE
         
-        logger.info(f"群聊归档: 初始化完成，监控群: {self.monitored_groups}，目标群: {self.target_group}")
+        logger.info(f"群聊总结: 初始化完成，监控群: {self.monitored_groups}，目标群: {self.target_group}")
 
     async def _load_last_summary_time(self, group_id: str) -> float:
         try:
@@ -311,7 +310,7 @@ class GroupArchiverPlugin(Star):
         try:
             await self.put_kv_data(f"last_summary_{group_id}", timestamp)
         except Exception as e:
-            logger.error(f"群聊归档: 保存时间戳失败: {e}")
+            logger.error(f"群聊总结: 保存时间戳失败: {e}")
 
     async def fetch_group_history(self, bot, group_id: str, hours_limit: int = 24, since_timestamp: float = 0):
         all_messages = []
@@ -322,7 +321,7 @@ class GroupArchiverPlugin(Star):
         if since_timestamp > 0:
             cutoff_time = max(cutoff_time, since_timestamp)
 
-        logger.info(f"群聊归档: 开始获取群 {group_id} 消息，时间范围: {datetime.datetime.fromtimestamp(cutoff_time)}")
+        logger.info(f"群聊总结: 开始获取群 {group_id} 消息，时间范围: {datetime.datetime.fromtimestamp(cutoff_time)}")
 
         for round_idx in range(self.max_query_rounds):
             if len(all_messages) >= self.max_msg_count:
@@ -335,13 +334,13 @@ class GroupArchiverPlugin(Star):
                     "message_seq": message_seq,
                     "reverseOrder": True,
                 }
-                logger.info(f"群聊归档: Round {round_idx+1}: 获取参数: {params}")
+                logger.info(f"群聊总结: Round {round_idx+1}: 获取参数: {params}")
                 
                 resp = await bot.api.call_action("get_group_msg_history", **params)
 
                 round_messages = resp.get("messages", [])
                 if not round_messages:
-                    logger.info(f"群聊归档: Round {round_idx+1}: 未获取到消息，退出循环")
+                    logger.info(f"群聊总结: Round {round_idx+1}: 未获取到消息，退出循环")
                     break
                     
                 batch_msgs = round_messages
@@ -357,31 +356,31 @@ class GroupArchiverPlugin(Star):
                     newest_msg_time = first_msg_time
                     message_seq = batch_msgs[-1]["message_seq"]
                 
-                logger.info(f"群聊归档: Round {round_idx+1}: 最旧消息时间: {oldest_msg_time}")
-                logger.info(f"群聊归档: Round {round_idx+1}: 最新消息时间: {newest_msg_time}")
+                logger.info(f"群聊总结: Round {round_idx+1}: 最旧消息时间: {oldest_msg_time}")
+                logger.info(f"群聊总结: Round {round_idx+1}: 最新消息时间: {newest_msg_time}")
                 
                 if message_seq == prev_message_seq:
-                    logger.info(f"群聊归档: Round {round_idx+1}: message_seq未变化({message_seq})，退出循环")
+                    logger.info(f"群聊总结: Round {round_idx+1}: message_seq未变化({message_seq})，退出循环")
                     break
                     
                 prev_message_seq = message_seq
                     
-                logger.info(f"群聊归档: 本次获取到的最旧一条message_seq:{message_seq}")
-                logger.info(f"群聊归档: Round {round_idx+1}: 获取到 {len(batch_msgs)} 条消息")
+                logger.info(f"群聊总结: 本次获取到的最旧一条message_seq:{message_seq}")
+                logger.info(f"群聊总结: Round {round_idx+1}: 获取到 {len(batch_msgs)} 条消息")
                 
                 if not batch_msgs:
-                    logger.info(f"群聊归档: Round {round_idx+1}: batch_msgs为空，退出循环")
+                    logger.info(f"群聊总结: Round {round_idx+1}: batch_msgs为空，退出循环")
                     break
 
                 all_messages.extend(batch_msgs)
 
                 if oldest_msg_time < cutoff_time:
-                    logger.info(f"群聊归档: Round {round_idx+1}: 已到达时间截止点，退出循环")
+                    logger.info(f"群聊总结: Round {round_idx+1}: 已到达时间截止点，退出循环")
                     break
 
             except Exception as e:
-                logger.error(f"群聊归档: Error: {traceback.format_exc()}")
-                logger.info(f"群聊归档: Fetch loop error: {e}")
+                logger.error(f"群聊总结: Error: {traceback.format_exc()}")
+                logger.info(f"群聊总结: Fetch loop error: {e}")
                 break
 
         filtered_messages = [m for m in all_messages if m.get("time", 0) >= cutoff_time]
@@ -389,11 +388,12 @@ class GroupArchiverPlugin(Star):
 
     def process_messages(self, messages: list, hours_limit: int = 24):
         cutoff_time = time.time() - (hours_limit * 3600)
-        logger.info(f"群聊归档: 开始处理 {len(messages)} 条消息")
+        logger.info(f"群聊总结: 开始处理 {len(messages)} 条消息")
         
         valid_msgs = []
         filter_date_count = 0
         filter_sys_msg_count = 0
+        media_files = []
         
         for msg in messages:
             ts = msg.get("time", 0)
@@ -401,13 +401,40 @@ class GroupArchiverPlugin(Star):
                 filter_date_count += 1
                 continue
 
-            if "[CQ:" in msg.get("raw_message", ""):
+            raw_msg = msg.get("raw_message", "")
+            sender = msg.get("sender", {})
+            nickname = sender.get("card") or sender.get("nickname") or "未知用户"
+            
+            if "[CQ:image" in raw_msg:
+                match = re.search(r'\[CQ:image,file=([^\],]+)', raw_msg)
+                if match:
+                    img_url = match.group(1)
+                    media_files.append({
+                        "type": "image",
+                        "url": img_url,
+                        "time": ts,
+                        "name": nickname
+                    })
+            
+            if "[CQ:file" in raw_msg:
+                match = re.search(r'\[CQ:file,file=([^\],]+)', raw_msg)
+                url_match = re.search(r'\[CQ:file[^]]*url=([^\],]+)', raw_msg)
+                if match:
+                    file_id = match.group(1)
+                    file_url = url_match.group(1) if url_match else file_id
+                    media_files.append({
+                        "type": "file",
+                        "url": file_url,
+                        "file_id": file_id,
+                        "time": ts,
+                        "name": nickname
+                    })
+            
+            if "[CQ:" in raw_msg:
                 filter_sys_msg_count += 1
                 continue
 
-            sender = msg.get("sender", {})
-            nickname = sender.get("card") or sender.get("nickname") or "未知用户"
-            content = msg.get("raw_message") or ""
+            content = raw_msg or ""
 
             valid_msgs.append({
                 "time": ts,
@@ -420,21 +447,31 @@ class GroupArchiverPlugin(Star):
             for m in valid_msgs
         ])
         
-        logger.info(f"群聊归档: 共获取到{len(valid_msgs)}条有效消息,过滤{filter_date_count}条时间超出限制消息,过滤{filter_sys_msg_count}条系统消息")
-        return valid_msgs, chat_log
+        logger.info(f"群聊总结: 共获取到{len(valid_msgs)}条有效消息,过滤{filter_date_count}条时间超出限制消息,过滤{filter_sys_msg_count}条系统消息,收集{len(media_files)}个媒体文件")
+        return valid_msgs, chat_log, media_files
 
     async def generate_summary(self, chat_log: str, group_name: str, hours: int) -> dict:
         if len(chat_log) > self.msg_token_limit:
-            logger.warning(f"群聊归档: LLM 日志长度超过限制:{len(chat_log)}，已截断。")
+            logger.warning(f"群聊总结: LLM 日志长度超过限制:{len(chat_log)}，已截断。")
             chat_log = chat_log[:self.msg_token_limit]
 
         prompt = f"""
-你是一个群聊记录员"{self.bot_name}"。请根据以下的群聊记录（最近{hours}小时），生成一份精炼的总结。
+你是一个班群记录员"{self.bot_name}"。请根据以下的班群聊天记录（最近{hours}小时），生成一份精炼的总结。
 
 【要求】：
-1. **重要通知**：提取群内的通知、公告、重要信息（如活动、会议、截止日期等），分点列出（每点不超过25字），如果没有则填"无"。
-2. **消息总结**：分点概括群内讨论的主要内容（3-6点），每点简洁明了（不超过30字），包含时间段。
-3. 严格返回纯JSON格式，不要使用markdown代码块，不要添加```json等标记：{{"important_notices": ["通知1", "通知2"], "summary_points": [{{"time_range": "...", "content": "..."}}]}}
+1. **重要通知**：提取群内的通知、公告、重要信息，按类别分类：
+   - 学科类通知（作业、考试等）：标注学科名
+   - 事务类通知（体检、返校、缴费等）：统一归为"事务通知"
+   - 每点不超过25字，如果没有则填"无"
+   - 格式：{{"category": "学科名或事务通知", "content": "通知内容"}}
+   
+2. **分学科总结**：按学科分类概括群内讨论的内容。学科包括：语文、数学、英语、物理、化学、生物、历史、地理、政治、其他。
+   - 每个学科如果有相关讨论，则列出（时间+内容，不超过30字）
+   - 没有讨论的学科不要列出
+   - 格式：{{"subject": "学科名", "time_range": "时间", "content": "内容"}}
+   
+3. 严格返回纯JSON格式，不要使用markdown代码块：
+{{"important_notices": [{{"category": "数学", "content": "明天交作业"}}, {{"category": "事务通知", "content": "周五体检"}}], "summary_points": [{{"subject": "数学", "time_range": "...", "content": "..."}}]}}
 
 【聊天记录】：
 {chat_log}
@@ -444,17 +481,17 @@ class GroupArchiverPlugin(Star):
             provider = self.context.get_provider_by_id(
                 self.config.get("provider_id")) or self.context.get_using_provider()
             if not provider:
-                logger.error("群聊归档: 未配置 LLM 提供商")
+                logger.error("群聊总结: 未配置 LLM 提供商")
                 return {"summary_points": [], "important_notices": ["未配置LLM提供商"]}
 
             response = await provider.text_chat(prompt, session_id=None)
-            logger.info(f"群聊归档: LLM 原始回复: {response.completion_text}")
+            logger.info(f"群聊总结: LLM 原始回复: {response.completion_text}")
             
             cleaned_response = self._clean_llm_response(response.completion_text)
             analysis_data = _parse_llm_json(cleaned_response)
             return analysis_data
         except Exception as e:
-            logger.error(f"群聊归档: LLM Error: {traceback.format_exc()}")
+            logger.error(f"群聊总结: LLM Error: {traceback.format_exc()}")
             return {"summary_points": [], "important_notices": [f"生成失败: {str(e)}"]}
 
     def _clean_llm_response(self, text: str) -> str:
@@ -476,61 +513,22 @@ class GroupArchiverPlugin(Star):
             }
             options = {"quality": 95, "device_scale_factor_level": "ultra", "viewport_width": 500}
             img_url = await self.html_render(self.html_template, render_data, options=options)
-            logger.info(f"群聊归档: 图片渲染成功")
+            logger.info(f"群聊总结: 图片渲染成功")
             return img_url
         except Exception as e:
-            logger.error(f"群聊归档: 图片渲染失败: {traceback.format_exc()}")
+            logger.error(f"群聊总结: 图片渲染失败: {traceback.format_exc()}")
             return None
 
-    async def send_forward_message(self, bot, group_id: str, title: str, content_lines: list):
-        try:
-            nodes = []
-            
-            nodes.append(Node(
-                uin=str(bot.self_id) if hasattr(bot, 'self_id') else '0',
-                name=self.bot_name,
-                content=[Plain(title)]
-            ))
-            
-            for line in content_lines:
-                if line.strip():
-                    nodes.append(Node(
-                        uin=str(bot.self_id) if hasattr(bot, 'self_id') else '0',
-                        name=self.bot_name,
-                        content=[Plain(line)]
-                    ))
-            
-            await bot.api.call_action("send_group_forward_msg", group_id=int(group_id), messages=nodes)
-            logger.info(f"群聊归档: 合并转发消息发送成功，群: {group_id}")
-            return True
-        except Exception as e:
-            logger.error(f"群聊归档: 合并转发消息发送失败: {traceback.format_exc()}")
-            return False
-
-    async def send_summary_to_target(self, bot, group_name: str, analysis_data: dict, hours: int):
+    async def send_summary_to_target(self, group_name: str, analysis_data: dict, hours: int, media_files: list = None):
         try:
             img_url = await self.render_summary_image(group_name, analysis_data, hours)
             
-            lines = []
-            lines.append(f"【{group_name}】群聊总结")
-            lines.append(f"时间范围: 最近 {hours} 小时")
-            lines.append("")
+            platform = self.context.get_platform(filter.PlatformAdapterType.AIOCQHTTP)
+            if not platform:
+                logger.error("群聊总结: 未找到 AIOCQHTTP 平台")
+                return False
             
-            notices = analysis_data.get("important_notices", [])
-            if notices and notices[0] != "无":
-                lines.append("重要通知:")
-                for notice in notices:
-                    if notice and notice != "无":
-                        lines.append(f"  - {notice}")
-                lines.append("")
-            
-            lines.append("消息总结:")
-            for idx, point in enumerate(analysis_data.get("summary_points", []), 1):
-                time_range = point.get("time_range", "")
-                content = point.get("content", "")
-                lines.append(f"{idx}. [{time_range}] {content}")
-            
-            await self.send_forward_message(bot, self.target_group, f"{self.bot_name}的群聊报告", lines)
+            bot = platform.get_client()
             
             if img_url:
                 try:
@@ -539,37 +537,127 @@ class GroupArchiverPlugin(Star):
                         group_id=int(self.target_group),
                         message=f"[CQ:image,file={img_url}]"
                     )
-                    logger.info(f"群聊归档: 图片发送成功")
+                    logger.info(f"群聊总结: 图片发送成功")
                 except Exception as e:
-                    logger.error(f"群聊归档: 图片发送失败: {e}")
+                    logger.error(f"群聊总结: 图片发送失败: {e}")
                 
                 try:
-                    import aiohttp
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(img_url) as resp:
-                            if resp.status == 200:
-                                file_data = await resp.read()
-                                today = datetime.datetime.now().strftime("%Y%m%d")
-                                file_name = f"summary_{group_name}_{today}.jpg"
-                                temp_path = self._plugin_data_path / file_name
-                                with open(temp_path, "wb") as f:
-                                    f.write(file_data)
-                                
-                                folder_name = f"群聊总结_{today}"
-                                await self.create_group_folder(bot, self.target_group, folder_name)
-                                await self.upload_group_file(bot, self.target_group, str(temp_path), file_name)
-                                logger.info(f"群聊归档: 总结图片已上传到群文件夹")
-                                
-                                if temp_path.exists():
-                                    os.remove(temp_path)
-                                    logger.info(f"群聊归档: 临时文件已清理: {temp_path}")
+                    now = datetime.datetime.now()
+                    file_name = f"summary_{group_name}_{now.strftime('%Y%m%d_%H%M%S')}.jpg"
+                    
+                    download_result = await bot.api.call_action(
+                        "download_file",
+                        url=img_url,
+                        thread_count=1
+                    )
+                    
+                    if download_result:
+                        file_path = download_result.get("file", "")
+                        if file_path:
+                            folder_name = "群聊总结"
+                            folder_id = await self.get_or_create_folder(bot, self.target_group, folder_name)
+                            await self.upload_group_file(bot, self.target_group, file_path, file_name, folder_id)
+                            logger.info(f"群聊总结: 总结图片已上传到群文件夹")
                 except Exception as e:
-                    logger.error(f"群聊归档: 上传图片失败: {e}")
+                    logger.error(f"群聊总结: 上传总结图片失败: {e}")
+            
+            if media_files and len(media_files) > 0:
+                await self.send_media_forward(bot, group_name, media_files)
             
             return True
         except Exception as e:
-            logger.error(f"群聊归档: 发送总结失败: {traceback.format_exc()}")
+            logger.error(f"群聊总结: 发送总结失败: {traceback.format_exc()}")
             return False
+
+    async def send_media_forward(self, bot, group_name: str, media_files: list):
+        try:
+            if not media_files:
+                return
+            
+            max_files = min(len(media_files), 20)
+            media_files = media_files[:max_files]
+            
+            self._recent_media_files = media_files
+            
+            image_count = sum(1 for f in media_files if f.get("type") == "image")
+            file_count = sum(1 for f in media_files if f.get("type") == "file")
+            
+            nodes = []
+            
+            nodes.append({
+                "type": "node",
+                "data": {
+                    "uin": str(bot.self_id) if hasattr(bot, 'self_id') else '0',
+                    "name": self.bot_name,
+                    "content": [
+                        {"type": "text", "data": {"text": f"【{group_name}】媒体文件 (图片{image_count}张, 文件{file_count}个)"}},
+                        {"type": "text", "data": {"text": "使用 /保存 <序号> 保存文件"}}
+                    ]
+                }
+            })
+            
+            for idx, media in enumerate(media_files, 1):
+                media_url = media.get("url", "")
+                media_name = media.get("name", "未知用户")
+                media_time = media.get("time", 0)
+                media_type = media.get("type", "image")
+                file_id = media.get("file_id", "")
+                
+                if media_url:
+                    time_str = datetime.datetime.fromtimestamp(media_time).strftime('%H:%M') if media_time else ""
+                    if media_type == "image":
+                        nodes.append({
+                            "type": "node",
+                            "data": {
+                                "uin": str(bot.self_id) if hasattr(bot, 'self_id') else '0',
+                                "name": f"{idx}. {media_name} {time_str}",
+                                "content": [{"type": "image", "data": {"file": media_url}}]
+                            }
+                        })
+                    else:
+                        nodes.append({
+                            "type": "node",
+                            "data": {
+                                "uin": str(bot.self_id) if hasattr(bot, 'self_id') else '0',
+                                "name": f"{idx}. {media_name} {time_str}",
+                                "content": [{"type": "file", "data": {"file": file_id or media_url, "name": file_id or media_url}}]
+                            }
+                        })
+            
+            await bot.api.call_action("send_group_forward_msg", group_id=int(self.target_group), messages=nodes)
+            logger.info(f"群聊总结: 合并转发媒体文件成功，共 {len(media_files)} 个")
+        except Exception as e:
+            logger.error(f"群聊总结: 合并转发媒体文件失败: {traceback.format_exc()}")
+
+    async def get_or_create_folder(self, bot, group_id: str, folder_name: str) -> str:
+        try:
+            resp = await bot.api.call_action("get_group_root_files", group_id=int(group_id))
+            folders = resp.get("folders", [])
+            for folder in folders:
+                if folder.get("folder_name") == folder_name:
+                    logger.info(f"群聊总结: 找到已存在的文件夹: {folder_name}")
+                    return folder.get("folder_id", "")
+            
+            try:
+                await bot.api.call_action(
+                    "create_group_file_folder",
+                    group_id=int(group_id),
+                    name=folder_name
+                )
+                logger.info(f"群聊总结: 创建文件夹成功: {folder_name}")
+            except Exception:
+                logger.warning(f"群聊总结: 创建文件夹失败，可能已存在")
+            
+            resp = await bot.api.call_action("get_group_root_files", group_id=int(group_id))
+            folders = resp.get("folders", [])
+            for folder in folders:
+                if folder.get("folder_name") == folder_name:
+                    return folder.get("folder_id", "")
+            
+            return ""
+        except Exception as e:
+            logger.error(f"群聊总结: 获取/创建文件夹失败: {e}")
+            return ""
 
     async def upload_group_file(self, bot, group_id: str, file_path: str, file_name: str, folder_id: str = None):
         try:
@@ -581,35 +669,40 @@ class GroupArchiverPlugin(Star):
             if folder_id:
                 params["folder"] = folder_id
             await bot.api.call_action("upload_group_file", **params)
-            logger.info(f"群聊归档: 文件上传成功: {file_name}")
+            logger.info(f"群聊总结: 文件上传成功: {file_name}")
             return True
         except Exception as e:
-            logger.error(f"群聊归档: 文件上传失败: {traceback.format_exc()}")
+            logger.error(f"群聊总结: 文件上传失败: {traceback.format_exc()}")
             return False
 
-    async def create_group_folder(self, bot, group_id: str, folder_name: str):
+    async def send_file_to_group(self, bot, group_id: str, file_url: str, file_name: str):
         try:
-            await bot.api.call_action(
-                "create_group_file_folder",
-                group_id=int(group_id),
-                name=folder_name
-            )
-            logger.info(f"群聊归档: 创建文件夹成功: {folder_name}")
+            message = [
+                {
+                    "type": "file",
+                    "data": {
+                        "file": file_url,
+                        "name": file_name
+                    }
+                }
+            ]
+            await bot.api.call_action("send_group_msg", group_id=int(group_id), message=message)
+            logger.info(f"群聊总结: 文件发送成功: {file_name}")
             return True
         except Exception as e:
-            logger.error(f"群聊归档: 创建文件夹失败: {traceback.format_exc()}")
+            logger.error(f"群聊总结: 文件发送失败: {traceback.format_exc()}")
             return False
 
     async def run_summary_for_group(self, group_id: str, hours: int = None):
         if hours is None:
             hours = self.summary_hours
             
-        logger.info(f"群聊归档: 开始为群 {group_id} 生成总结")
+        logger.info(f"群聊总结: 开始为群 {group_id} 生成总结")
         
         try:
             platform = self.context.get_platform(filter.PlatformAdapterType.AIOCQHTTP)
             if not platform:
-                logger.error("群聊归档: 未找到 AIOCQHTTP 平台")
+                logger.error("群聊总结: 未找到 AIOCQHTTP 平台")
                 return None
                 
             bot = platform.get_client()
@@ -624,12 +717,12 @@ class GroupArchiverPlugin(Star):
             raw_messages = await self.fetch_group_history(bot, group_id, hours_limit=hours, since_timestamp=last_time)
             
             if not raw_messages:
-                logger.info(f"群聊归档: 群 {group_id} 没有新消息")
+                logger.info(f"群聊总结: 群 {group_id} 没有新消息")
                 return None
             
-            valid_msgs, chat_log = self.process_messages(raw_messages, hours_limit=hours)
+            valid_msgs, chat_log, media_files = self.process_messages(raw_messages, hours_limit=hours)
             if not valid_msgs:
-                logger.info(f"群聊归档: 群 {group_id} 没有有效消息")
+                logger.info(f"群聊总结: 群 {group_id} 没有有效消息")
                 return None
             
             analysis_data = await self.generate_summary(chat_log, group_name, hours)
@@ -641,14 +734,15 @@ class GroupArchiverPlugin(Star):
                 "group_name": group_name,
                 "analysis_data": analysis_data,
                 "hours": hours,
-                "msg_count": len(valid_msgs)
+                "msg_count": len(valid_msgs),
+                "media_files": media_files
             }
         except Exception as e:
-            logger.error(f"群聊归档: 生成总结失败: {traceback.format_exc()}")
+            logger.error(f"群聊总结: 生成总结失败: {traceback.format_exc()}")
             return None
 
     async def scheduler_loop(self):
-        logger.info(f"群聊归档: 定时任务启动，计划时间: {self.summary_schedule}")
+        logger.info(f"群聊总结: 定时任务启动，计划时间: {self.summary_schedule}")
         
         while True:
             try:
@@ -663,19 +757,19 @@ class GroupArchiverPlugin(Star):
                     )
                 
                 wait_seconds = (target_datetime - now).total_seconds()
-                logger.info(f"群聊归档: 下次执行时间: {target_datetime}，等待 {wait_seconds} 秒")
+                logger.info(f"群聊总结: 下次执行时间: {target_datetime}，等待 {wait_seconds} 秒")
                 
                 await asyncio.sleep(wait_seconds)
                 
                 if not self.monitored_groups or not self.target_group:
-                    logger.warning("群聊归档: 未配置监控群或目标群，跳过定时任务")
+                    logger.warning("群聊总结: 未配置监控群或目标群，跳过定时任务")
                     continue
                 
                 platform = self.context.get_platform(filter.PlatformAdapterType.AIOCQHTTP)
                 if not platform:
-                    logger.error("群聊归档: 未找到 AIOCQHTTP 平台")
+                    logger.error("群聊总结: 未找到 AIOCQHTTP 平台")
                     continue
-                    
+                
                 bot = platform.get_client()
                 
                 await bot.api.call_action(
@@ -688,10 +782,10 @@ class GroupArchiverPlugin(Star):
                     result = await self.run_summary_for_group(group_id)
                     if result:
                         await self.send_summary_to_target(
-                            bot, 
                             result["group_name"], 
                             result["analysis_data"], 
-                            result["hours"]
+                            result["hours"],
+                            result.get("media_files", [])
                         )
                         await asyncio.sleep(2)
                 
@@ -702,64 +796,70 @@ class GroupArchiverPlugin(Star):
                 )
                 
             except Exception as e:
-                logger.error(f"群聊归档: 定时任务错误: {traceback.format_exc()}")
+                logger.error(f"群聊总结: 定时任务错误: {traceback.format_exc()}")
                 await asyncio.sleep(60)
 
     @filter.on_astrbot_loaded()
     async def on_loaded(self):
         if self.monitored_groups and self.target_group and self.summary_schedule:
             self._scheduler_task = asyncio.create_task(self.scheduler_loop())
-            logger.info("群聊归档: 定时任务已启动")
+            logger.info("群聊总结: 定时任务已启动")
         else:
-            logger.warning("群聊归档: 配置不完整，定时任务未启动")
+            logger.warning("群聊总结: 配置不完整，定时任务未启动")
 
-    @filter.command("归档总结")
+    @filter.command("总结")
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def manual_summary(self, event: AstrMessageEvent, hours: int = 24):
-        """手动触发总结: /归档总结 [小时数]"""
+        """手动触发总结: /总结 [小时数]"""
         if not self.target_group:
             yield event.plain_result("未配置目标群，请先在配置中设置 target_group")
             return
         
-        group_id = event.get_group_id()
-        if not group_id:
-            group_id = self.monitored_groups[0] if self.monitored_groups else None
-        
-        if not group_id:
-            yield event.plain_result("未指定监控群")
-            return
-        
-        yield event.plain_result(f"正在生成群 {group_id} 最近 {hours} 小时的总结...")
-        
-        result = await self.run_summary_for_group(group_id, hours)
-        if not result:
-            yield event.plain_result("没有找到有效消息或生成失败")
+        if not self.monitored_groups:
+            yield event.plain_result("未配置监控群，请先在配置中设置 monitored_groups")
             return
         
         platform = self.context.get_platform(filter.PlatformAdapterType.AIOCQHTTP)
-        if platform:
-            bot = platform.get_client()
-            success = await self.send_summary_to_target(
-                bot, 
-                result["group_name"], 
-                result["analysis_data"], 
-                result["hours"]
-            )
-            if success:
-                yield event.plain_result(f"总结已发送到目标群")
-            else:
-                yield event.plain_result("总结发送失败")
-        else:
+        if not platform:
             yield event.plain_result("无法获取平台实例")
+            return
+        
+        bot = platform.get_client()
+        
+        yield event.plain_result(f"正在为 {len(self.monitored_groups)} 个监控群生成总结...")
+        
+        success_count = 0
+        for group_id in self.monitored_groups:
+            result = await self.run_summary_for_group(group_id, hours)
+            if result:
+                success = await self.send_summary_to_target(
+                    result["group_name"], 
+                    result["analysis_data"], 
+                    result["hours"],
+                    result.get("media_files", [])
+                )
+                if success:
+                    success_count += 1
+                await asyncio.sleep(2)
+        
+        yield event.plain_result(f"总结完成，成功: {success_count}/{len(self.monitored_groups)}")
 
-    @filter.command("归档文件")
+    @filter.command("保存")
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
-    async def archive_file(self, event: AstrMessageEvent):
-        """回复消息归档: 回复图片/文件消息并发送 /归档文件"""
+    async def archive_file(self, event: AstrMessageEvent, index: int = 0):
+        """保存文件到群: /保存 <序号>"""
         if not self.target_group:
             yield event.plain_result("未配置目标群")
+            return
+        
+        if not self._recent_media_files:
+            yield event.plain_result("没有可保存的文件，请先生成总结")
+            return
+        
+        if index < 1 or index > len(self._recent_media_files):
+            yield event.plain_result(f"序号无效，请输入 1-{len(self._recent_media_files)} 之间的数字")
             return
         
         try:
@@ -770,68 +870,38 @@ class GroupArchiverPlugin(Star):
             
             bot = platform.get_client()
             
-            raw_msg = event.message_obj.raw_message
-            if not raw_msg:
-                yield event.plain_result("无法获取原始消息")
-                return
-            
-            file_url = None
-            file_name = None
-            
-            message = event.message_obj.message
-            for comp in message:
-                if hasattr(comp, 'url') and comp.__class__.__name__ == 'Image':
-                    file_url = comp.url
-                    file_name = f"image_{int(time.time())}.jpg"
-                    break
-            
-            if not file_url and isinstance(raw_msg, dict):
-                message_content = raw_msg.get("message", [])
-                if isinstance(message_content, list):
-                    for seg in message_content:
-                        if seg.get("type") == "image":
-                            file_url = seg.get("data", {}).get("url")
-                            file_name = f"image_{int(time.time())}.jpg"
-                            break
-                        elif seg.get("type") == "file":
-                            file_url = seg.get("data", {}).get("url")
-                            file_name = seg.get("data", {}).get("file", f"file_{int(time.time())}")
-                            break
+            media = self._recent_media_files[index - 1]
+            file_url = media.get("url", "")
+            media_type = media.get("type", "image")
+            media_name = media.get("name", "未知用户")
             
             if not file_url:
-                yield event.plain_result("未找到可归档的图片或文件，请回复包含图片/文件的消息")
+                yield event.plain_result("文件URL无效")
                 return
             
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.get(file_url) as resp:
-                    if resp.status == 200:
-                        file_data = await resp.read()
-                        temp_path = self._plugin_data_path / file_name
-                        with open(temp_path, "wb") as f:
-                            f.write(file_data)
+            now = datetime.datetime.now()
+            if media_type == "image":
+                file_name = f"{index}_{media_name}_{now.strftime('%H%M%S')}.jpg"
+            else:
+                file_name = f"{index}_{media_name}_{now.strftime('%H%M%S')}.file"
             
-            today = datetime.datetime.now().strftime("%Y%m%d")
-            folder_name = f"归档_{today}"
-            await self.create_group_folder(bot, self.target_group, folder_name)
-            
-            success = await self.upload_group_file(bot, self.target_group, str(temp_path), file_name)
+            success = await self.send_file_to_group(bot, self.target_group, file_url, file_name)
             
             if success:
-                yield event.plain_result(f"文件已归档到目标群文件夹: {folder_name}/{file_name}")
+                yield event.plain_result(f"文件已发送到目标群: {file_name}")
             else:
-                yield event.plain_result("文件归档失败")
+                yield event.plain_result("文件发送失败")
                 
         except Exception as e:
-            logger.error(f"群聊归档: 归档文件失败: {traceback.format_exc()}")
-            yield event.plain_result(f"归档失败: {str(e)}")
+            logger.error(f"群聊总结: 保存文件失败: {traceback.format_exc()}")
+            yield event.plain_result(f"保存失败: {str(e)}")
 
-    @filter.command("归档状态")
+    @filter.command("总结状态")
     @filter.permission_type(filter.PermissionType.ADMIN)
     async def check_status(self, event: AstrMessageEvent):
-        """查看归档配置状态: /归档状态"""
+        """查看总结配置状态: /总结状态"""
         status_lines = [
-            f"群聊归档状态",
+            f"群聊总结状态",
             f"━━━━━━━━━━━━━━━",
             f"机器人名称: {self.bot_name}",
             f"监控群: {', '.join(self.monitored_groups) if self.monitored_groups else '未配置'}",
@@ -845,4 +915,4 @@ class GroupArchiverPlugin(Star):
     async def terminate(self):
         if self._scheduler_task:
             self._scheduler_task.cancel()
-            logger.info("群聊归档: 定时任务已停止")
+            logger.info("群聊总结: 定时任务已停止")

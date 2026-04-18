@@ -58,7 +58,7 @@
         "default": 15000
     },
     "provider_id": {
-        "description": "用于分析画像的LLM提供商",
+        "description": "用于生成总结的LLM提供商",
         "hint": "留空或者填写的提供商不存在时，则使用当前正在使用的LLM提供商",
         "type": "string",
         "default": "",

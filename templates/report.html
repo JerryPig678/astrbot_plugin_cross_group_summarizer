@@ -200,11 +200,11 @@
                     </div>
                     <div class="stat-divider"></div>
                     <div class="stat-item">
-                        <div class="stat-value">{% if important_notices and important_notices[0] != "无" %}{{ important_notices|length }}{% else %}0{% endif %}</div>
+                        <div class="stat-value">{% if important_notices %}{{ important_notices|length }}{% else %}0{% endif %}</div>
                         <div class="stat-label">通知</div>
                     </div>
                 </div>
-                {% if important_notices and important_notices|length > 0 and important_notices[0] != "无" %}
+                {% if important_notices and important_notices|length > 0 %}
                 <section class="section">
                     <div class="section-header">
                         <div class="section-icon">!</div>
@@ -213,8 +213,8 @@
                     <div class="notice-box">
                         <div class="notice-list">
                             {% for notice in important_notices %}
-                            {% if notice and notice != "无" %}
-                            <div class="notice-item">{{ notice }}</div>
+                            {% if notice and notice.content %}
+                            <div class="notice-item">【{{ notice.category }}】{{ notice.content }}</div>
                             {% endif %}
                             {% endfor %}
                         </div>
@@ -225,12 +225,12 @@
                 <section class="section">
                     <div class="section-header">
                         <div class="section-icon">S</div>
-                        <h2 class="section-title">消息总结</h2>
+                        <h2 class="section-title">分学科总结</h2>
                     </div>
                     <div class="summary-list">
                         {% for point in summary_points %}
                         <article class="summary-item">
-                            <div class="summary-time">{{ point.time_range }}</div>
+                            <div class="summary-time">{{ point.subject }} · {{ point.time_range }}</div>
                             <p class="summary-text">{{ point.content }}</p>
                         </article>
                         {% endfor %}
